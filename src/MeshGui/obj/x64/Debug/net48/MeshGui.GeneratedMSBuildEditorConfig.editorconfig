@@ -1,0 +1,8 @@
+is_global = true
+build_property.RootNamespace = MeshGui
+build_property.ProjectDir = E:\VS_PROYECTOS\CSIBRIDGE_MINISCRIPTS\src\MeshGui\
+build_property.EnableComHosting = 
+build_property.EnableGeneratedComInterfaceComImportInterop = 
+build_property.CsWinRTUseWindowsUIXamlProjections = false
+build_property.EffectiveAnalysisLevelStyle = 
+build_property.EnableCodeStyleSeverity = 

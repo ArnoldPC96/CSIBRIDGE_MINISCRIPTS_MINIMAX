@@ -1,0 +1,37 @@
+excelente, gracias, te comento:
+1. si se conecta correctamente a CSIBridge. Además de imprimir la versión de OAPI, que imprima la versión de CSIBridge y el nombre del archivo actual y su ruta (si no tiene creo q se llama untitled)
+2. No he podido probar el botón '2. Capturar y Generar Malla', pues a pesar de que seleccione un elemento área (el alero en csibridge), me arroja error (imagen adjunta 1).
+3. para mejorar la interacción entre la gui y csibridge, agrgemos una tabla en la parte inferior del panel '1. Estregia de Captura', donde se colocarán los nombres de los puntos y sus coordenadas. Por otro lado, es incorrecto usar optionbutton para capturar, sería mejor algun botón para cada método de captura, donde una vez q se presione, se borre todo lo de la tabla actual, y se muestre 'selecciona elemento en csibridge', luego cuando ha seleccionado, pueda presionar nuevamente el botón y se cargue lo seleccionado en csibridge (sea area o puntos)
+4. el título de los paneles se ve un poco feo, entre 2 colores (gris y blanco), tal vez toda la ventana debería ser solo blanca
+5. He probado la opción de los 3 o 4 puntos, y si funciona, sin embargo me topado con varias cosas interesante que debemos arreglar:
+5.1. para selección de 3 o 4 puntos, se debe buscar elementos que ya existan justo sobre los límites de esas 3 o 4 coordenadas  (en todo el modelo) y borrarlos cuando se da al botón de mallado
+5.2. para selección de elemento área, se debe borrar el elemento cuando se ejecute el mallado personalizado
+5.3. para continuidad de la malla, se debe buscar nudos (en todo el modelo) que existan sobre los límites de nuestro nuevo mallado y tomarlos como puntos notables que prevalecen sobre nuestro tamaño de malla definido (imprimiendo un mensaje en un label la diferencia con el tamaño de malla dado en el gui, si está alredor del 50%, bien, si es mayor o menor del 50%, aviso)
+5.4. el algoritmo de mallado sufre en la diagonal, pues deja huecos (triangulos alargados)(lo señalado con fucsia en la imagen adjunta 2). En la imagen adjunta 3, te deje un esquema de lo que podría hacerse, no lo tengo claro, pero tal vez podríamos o bien solo la horizontal o bien solo la vertical cerca de la diagonal.
+
+
+excelente, gracias, te comento:
+1. cuando conecta a csibridge, aun no imprime la versión de csibridge, ni el nombre del modelo, ni su ruta (imagen adjunta 1)
+2. ya se arregló la continuidad con elementos adyacentes
+3. ya se mejoró la UI (labels, textbox, botones, tablas, etc)
+4. en el mallado se están montando algunas áreas (imagen adjunta 2, lo señalado con fucsia). Además, se están creando puntos sin utilidad (imagen adjunta 2, lo señalado con flechas negras). Es decir, el mallado está teniendo problemas en la diagonal, para lidiar con ello, se me acaba de ocurrir una mejor idea, creemos 2 option button: 'Prioridad horizontal', 'Prioridad vertical', donde si se elige la prioridad horizontal, el mallado vertical iria rotando casi junto con la diagonal (imagen adjunta 3)
+5. agreguemos un botón para borrar la o las mallas existentes que se ubican entre los 3 o 4 puntos seleccionados. No se si el botón '2. Ejecutar Mallado Personalizado' ya hace esto internamente, tras probarlo creo que no lo hace, debería hacerlo.
+6. agreguemos 2 optionbutton para elegir como dibujar: 'Horario' o 'Antihorario'
+
+
+gracias, te comento:
+1. haz perdido la prioridad de mallar por nodos adyacentes existentes (imagen adjunta 1, lo encerrado con fucsia)
+2. aun no has entendido que si pongo mallado por 'Prioridad Horizontal', las lineas horizontales deben ser continuas hasta chocar con la diagonal, las q sea adaptaran son las lineas verticales (imagen adjunta 1). Esta queja viene de que aun no se logra tener un mallado decente cerca de la diagonal.
+3. a pesar de que puse dibujo 'Antihorario', dibujó de forma 'Horaria' (imagen adjunta 1)
+4. La GUI tiene enorme vacío al medio, elimínalo (imagen adjunta 2)
+
+gracias, te comento:
+1. la GUI ya está bonita, respecto al modal, veo q es necesario, pero para mayor practicidad, agregemos un checkbox 'Siempre al frente' activado por defecto, tal que si se descative, se pierda la capacidad de estar siempre al frente
+2. las lineas horizontales, no las arreglaste, salieron prácticamente lo mismo de la misma manera que la anterior, no son horizontales, además te dije que las verticales las girases poco a poco en dirección de la diagonal para al llegar a ella se generen triangulos o trapecios decentes.
+3. tienes permiso de buildear por ti mismo, también las ediciones al código en la carpeta actual, hazlas, no me necesitas preguntarme
+
+gracias, te comento:
+1. ya gui está excelente
+2. la dirección del eje z de un elemento área, depende de la vista, por lo que es necesario ordenar los puntos de la tabla y tener un visor de xaml que se abra con un nuevo botón que nos muestre con lineas el contorno y como se va dibujando, una especie de animación (con etiquetas de las 3 o 4 esquinas)
+3. el script actual solo lo he probado para muro vertical triangular de 45° (alero) y funciona perfectamente bien, sin embargo, para cosas en planta salen cosas extrañas.
+(ir mejorando este prompt en base e pruebas, por ejemplo aleros trapeciales o de formas extrañas)

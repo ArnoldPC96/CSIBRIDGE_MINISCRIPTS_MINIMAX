@@ -1,0 +1,9 @@
+E:\VS_PROYECTOS\CSIBRIDGE_MINISCRIPTS\src\CsiRunner\obj\x64\Debug\CsiRunner.csproj.AssemblyReference.cache
+E:\VS_PROYECTOS\CSIBRIDGE_MINISCRIPTS\src\CsiRunner\obj\x64\Debug\CsiRunner.csproj.CoreCompileInputs.cache
+E:\VS_PROYECTOS\CSIBRIDGE_MINISCRIPTS\src\CsiRunner\bin\x64\Debug\CsiRunner.exe
+E:\VS_PROYECTOS\CSIBRIDGE_MINISCRIPTS\src\CsiRunner\bin\x64\Debug\CsiRunner.pdb
+E:\VS_PROYECTOS\CSIBRIDGE_MINISCRIPTS\src\CsiRunner\bin\x64\Debug\CSiAPIv1.dll
+E:\VS_PROYECTOS\CSIBRIDGE_MINISCRIPTS\src\CsiRunner\bin\x64\Debug\Microsoft.Win32.Registry.dll
+E:\VS_PROYECTOS\CSIBRIDGE_MINISCRIPTS\src\CsiRunner\obj\x64\Debug\CsiRunner.csproj.Up2Date
+E:\VS_PROYECTOS\CSIBRIDGE_MINISCRIPTS\src\CsiRunner\obj\x64\Debug\CsiRunner.exe
+E:\VS_PROYECTOS\CSIBRIDGE_MINISCRIPTS\src\CsiRunner\obj\x64\Debug\CsiRunner.pdb

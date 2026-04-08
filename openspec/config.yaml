@@ -1,0 +1,16 @@
+schema: spec-driven
+
+context: |
+  Tech stack: PowerShell + C# (.NET Framework 4.8, x64)
+  Architecture: External runner execution via COM to CSiBridge 26 (Marshal.GetActiveObject).
+  Testing: Executing `run.ps1` with ScriptClass to output JSON proof.
+  Style: C# standards. Rebuilds on every test run without locking IDE.
+
+strict_tdd: false
+
+rules:
+  proposal:
+    - Include COM memory management handling (avoid zombie processes/COM exception).
+  apply:
+    - Always use `CSiAPIv1.dll` from the system directory.
+    - Mini-scripts must implement `ICsiScript` and be compiled together statically by MSBuild.
