@@ -30,6 +30,24 @@ namespace MeshGui
             public int CompareTo(Point2D other) => U.CompareTo(other.U); // Por defecto ordena por U
         }
 
+        public class OrphanEdgeInfo
+        {
+            public Point2D EdgeStart { get; set; }
+            public Point2D EdgeEnd { get; set; }
+            public Point2D MissingNode { get; set; }
+            public int OrphanEdgeIndex { get; set; }
+            public int AdjacentEdgeIndex { get; set; }
+            public Point2D AdjacentEdgeStart { get; set; }
+            public Point2D AdjacentEdgeEnd { get; set; }
+        }
+
+        public class MeshResult
+        {
+            public List<List<Point3D>> Faces { get; set; }
+            public List<OrphanEdgeInfo> OrphanEdges { get; set; }
+            public List<List<Point2D>> RawFaces2D { get; set; }
+        }
+
         public static bool IsPointOnPolygonBoundary(Point3D p, List<Point3D> boundary, double tol)
         {
              for (int i = 0; i < boundary.Count; i++)
@@ -90,9 +108,9 @@ namespace MeshGui
         }
 
 
-        public static List<List<Point3D>> GenerateSlicerMesh(List<Point3D> boundary, List<Point3D> continuityNodes, double dx, double dy, double snapTolPercent, bool isHorizontalPriority, bool isAntiClockwise, int discontinuityHandling = 0)
+        public static MeshResult GenerateSlicerMesh(List<Point3D> boundary, List<Point3D> continuityNodes, double dx, double dy, double snapTolPercent, bool isHorizontalPriority, bool isAntiClockwise, int discontinuityHandling = 0)
         {
-            if (boundary.Count < 3) return new List<List<Point3D>>();
+            if (boundary.Count < 3) return new MeshResult { Faces = new List<List<Point3D>>(), OrphanEdges = new List<OrphanEdgeInfo>(), RawFaces2D = new List<List<Point2D>>() };
 
             Point3D O = boundary[0];
             Point3D vecU = (boundary[1] - boundary[0]).Normalize();
@@ -136,9 +154,12 @@ namespace MeshGui
 
             List<List<Point2D>> mappedFaces2D = DynamicZipper(poly2D, cont2D, crossSpacing, sliceSpacing, minSlice, maxSlice, isSliceU, discontinuityHandling);
 
-            if (discontinuityHandling == 1)
+            List<OrphanEdgeInfo> orphanEdges = new List<OrphanEdgeInfo>();
+
+            if (discontinuityHandling == 1 || discontinuityHandling == 2)
             {
-                RestoreSkippedBoundaries(mappedFaces2D, poly2D);
+                orphanEdges = RestoreSkippedBoundaries(mappedFaces2D, poly2D, isSliceU);
+                AddLocalTriangulationForCusps(mappedFaces2D, poly2D, cont2D, crossSpacing, minSlice, maxSlice, isSliceU);
             }
 
             List<List<Point3D>> mesh3D = new List<List<Point3D>>();
@@ -158,7 +179,7 @@ namespace MeshGui
                 mesh3D.Add(face3D);
             }
 
-            return mesh3D;
+            return new MeshResult { Faces = mesh3D, OrphanEdges = orphanEdges, RawFaces2D = mappedFaces2D };
         }
 
         private static List<List<Point2D>> DynamicZipper(List<Point2D> poly, List<Point2D> cont, double crossSpacing, double sliceSpacing, double minS, double maxS, bool isSliceU, int discontinuityHandling)
@@ -312,7 +333,7 @@ namespace MeshGui
 
             return validFaces;
         }
-        public static void RestoreSkippedBoundaries(List<List<Point2D>> mappedFaces2D, List<Point2D> poly2D)
+        public static List<OrphanEdgeInfo> RestoreSkippedBoundaries(List<List<Point2D>> mappedFaces2D, List<Point2D> poly2D, bool isSliceU)
         {
             Dictionary<string, int> edgeCounts = new Dictionary<string, int>();
             foreach (var face in mappedFaces2D) {
@@ -328,6 +349,7 @@ namespace MeshGui
             }
 
             List<List<Point2D>> newFaces = new List<List<Point2D>>();
+            List<OrphanEdgeInfo> orphanEdges = new List<OrphanEdgeInfo>();
 
             foreach (var face in mappedFaces2D) {
                 for (int i=0; i<face.Count; i++) {
@@ -343,28 +365,55 @@ namespace MeshGui
                         if (e1 != -1 && e2 != -1 && e1 != e2) {
                             int diff = (e2 - e1 + poly2D.Count) % poly2D.Count;
                             
-                            // Valid cut-off corner with 1 missing node
                             if (diff == 1) {
                                 Point2D missing = poly2D[(e1 + 1) % poly2D.Count];
                                 newFaces.Add(new List<Point2D>() { p2, p1, missing });
+                                
+                                orphanEdges.Add(new OrphanEdgeInfo {
+                                    EdgeStart = p1,
+                                    EdgeEnd = p2,
+                                    MissingNode = missing,
+                                    OrphanEdgeIndex = e1,
+                                    AdjacentEdgeIndex = e2,
+                                    AdjacentEdgeStart = poly2D[e2],
+                                    AdjacentEdgeEnd = poly2D[(e2 + 1) % poly2D.Count]
+                                });
                             }
-                            // Valid cut-off corner with 2 missing nodes
                             else if (diff == 2) {
                                 Point2D missing1 = poly2D[(e1 + 1) % poly2D.Count];
                                 Point2D missing2 = poly2D[(e1 + 2) % poly2D.Count];
                                 newFaces.Add(new List<Point2D>() { p2, p1, missing1, missing2 });
+                                
+                                orphanEdges.Add(new OrphanEdgeInfo {
+                                    EdgeStart = p1,
+                                    EdgeEnd = p2,
+                                    MissingNode = missing1,
+                                    OrphanEdgeIndex = e1,
+                                    AdjacentEdgeIndex = e2,
+                                    AdjacentEdgeStart = poly2D[e2],
+                                    AdjacentEdgeEnd = poly2D[(e2 + 1) % poly2D.Count]
+                                });
                             }
                             else if (diff > 2 && diff < poly2D.Count - 2) {
-                                // Si cortó una figura extraña de más de 2 nudos, se generaría un polígono > 4 lados
-                                // CSiBridge solo acepta tris o quads, así que se fracciona a la fuerza
                                 Point2D missing1 = poly2D[(e1 + 1) % poly2D.Count];
                                 newFaces.Add(new List<Point2D>() { p2, p1, missing1 });
+                                
+                                orphanEdges.Add(new OrphanEdgeInfo {
+                                    EdgeStart = p1,
+                                    EdgeEnd = p2,
+                                    MissingNode = missing1,
+                                    OrphanEdgeIndex = e1,
+                                    AdjacentEdgeIndex = e2,
+                                    AdjacentEdgeStart = poly2D[e2],
+                                    AdjacentEdgeEnd = poly2D[(e2 + 1) % poly2D.Count]
+                                });
                             }
                         }
                     }
                 }
             }
             mappedFaces2D.AddRange(newFaces);
+            return orphanEdges;
         }
 
         private static int GetPolyEdgeIndex(Point2D p, List<Point2D> poly)
@@ -384,6 +433,132 @@ namespace MeshGui
             double lenSq = (b.U - a.U) * (b.U - a.U) + (b.V - a.V) * (b.V - a.V);
             if (dot > lenSq + 1e-3) return false;
             return true;
+        }
+
+        private static void AddLocalTriangulationForCusps(List<List<Point2D>> mappedFaces2D, List<Point2D> poly, List<Point2D> cont, double crossSpacing, double minS, double maxS, bool isSliceU)
+        {
+            foreach (var cusp in cont)
+            {
+                double cuspS = isSliceU ? cusp.U : cusp.V;
+                double cuspC = isSliceU ? cusp.V : cusp.U;
+
+                if (cuspS <= minS + 0.001 || cuspS >= maxS - 0.001) continue;
+
+                // Find nearest mesh rows below and above cusp S
+                double sBelow = double.MinValue;
+                double sAbove = double.MaxValue;
+                foreach (var row in mappedFaces2D)
+                {
+                    if (row.Count < 2) continue;
+                    double rowS = isSliceU ? row[0].U : row[0].V;
+                    if (rowS < cuspS && rowS > sBelow) sBelow = rowS;
+                    if (rowS > cuspS && rowS < sAbove) sAbove = rowS;
+                }
+
+                // Find the mesh points at sBelow and sAbove closest to cuspC
+                Point2D ptBelow = null, ptAbove = null;
+                double minDistBelow = double.MaxValue, minDistAbove = double.MaxValue;
+
+                foreach (var row in mappedFaces2D)
+                {
+                    double rowS = isSliceU ? row[0].U : row[0].V;
+                    if (Math.Abs(rowS - sBelow) < 1e-4)
+                    {
+                        foreach (var pt in row)
+                        {
+                            double ptC = isSliceU ? pt.V : pt.U;
+                            double dist = Math.Abs(ptC - cuspC);
+                            if (dist < minDistBelow) { minDistBelow = dist; ptBelow = pt; }
+                        }
+                    }
+                    if (Math.Abs(rowS - sAbove) < 1e-4)
+                    {
+                        foreach (var pt in row)
+                        {
+                            double ptC = isSliceU ? pt.V : pt.U;
+                            double dist = Math.Abs(ptC - cuspC);
+                            if (dist < minDistAbove) { minDistAbove = dist; ptAbove = pt; }
+                        }
+                    }
+                }
+
+                // Create triangles connecting cusp to mesh below and above
+                if (ptBelow != null && ptAbove != null)
+                {
+                    // Triangle: cusp + closest pt below + closest pt above
+                    mappedFaces2D.Add(new List<Point2D> { cusp, ptBelow, ptAbove });
+                }
+                else if (ptBelow != null)
+                {
+                    // Only below row exists, create 2 triangles
+                    // Find another point on the same row that's on polygon boundary
+                    foreach (var row in mappedFaces2D)
+                    {
+                        double rowS = isSliceU ? row[0].U : row[0].V;
+                        if (Math.Abs(rowS - sBelow) < 1e-4)
+                        {
+                            foreach (var pt in row)
+                            {
+                                if (pt == ptBelow) continue;
+                                bool isOnPoly = false;
+                                for (int i = 0; i < poly.Count; i++)
+                                {
+                                    Point2D pA = poly[i];
+                                    Point2D pB = poly[(i + 1) % poly.Count];
+                                    double cross = (pt.U - pA.U) * (pB.V - pA.V) - (pt.V - pA.V) * (pB.U - pA.U);
+                                    double lenSq = (pB.U - pA.U) * (pB.U - pA.U) + (pB.V - pA.V) * (pB.V - pA.V);
+                                    double dot = (pt.U - pA.U) * (pB.U - pA.U) + (pt.V - pA.V) * (pB.V - pA.V);
+                                    if (Math.Abs(cross) < 1e-3 && dot >= -1e-3 && dot <= lenSq + 1e-3)
+                                    {
+                                        isOnPoly = true;
+                                        break;
+                                    }
+                                }
+                                if (isOnPoly)
+                                {
+                                    mappedFaces2D.Add(new List<Point2D> { cusp, ptBelow, pt });
+                                    break;
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+                else if (ptAbove != null)
+                {
+                    foreach (var row in mappedFaces2D)
+                    {
+                        double rowS = isSliceU ? row[0].U : row[0].V;
+                        if (Math.Abs(rowS - sAbove) < 1e-4)
+                        {
+                            foreach (var pt in row)
+                            {
+                                if (pt == ptAbove) continue;
+                                bool isOnPoly = false;
+                                for (int i = 0; i < poly.Count; i++)
+                                {
+                                    Point2D pA = poly[i];
+                                    Point2D pB = poly[(i + 1) % poly.Count];
+                                    double cross = (pt.U - pA.U) * (pB.V - pA.V) - (pt.V - pA.V) * (pB.U - pA.U);
+                                    double lenSq = (pB.U - pA.U) * (pB.U - pA.U) + (pB.V - pA.V) * (pB.V - pA.V);
+                                    double dot = (pt.U - pA.U) * (pB.U - pA.U) + (pt.V - pA.V) * (pB.V - pA.V);
+                                    if (Math.Abs(cross) < 1e-3 && dot >= -1e-3 && dot <= lenSq + 1e-3)
+                                    {
+                                        isOnPoly = true;
+                                        break;
+                                    }
+                                }
+                                if (isOnPoly)
+                                {
+                                    mappedFaces2D.Add(new List<Point2D> { cusp, ptAbove, pt });
+                                    break;
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
         }
     }
 }

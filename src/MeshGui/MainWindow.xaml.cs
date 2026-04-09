@@ -187,7 +187,7 @@ namespace MeshGui
                 
                 bool isHorizontalPriority = RbHoriz.IsChecked == true;
                 bool isAntiClockwise = RbAntiHorario.IsChecked == true;
-                int discontinuityHandling = RbNoHorizon.IsChecked == true ? 1 : (RbLocalSnowplow.IsChecked == true ? 2 : 3);
+                int discontinuityHandling = RbDefault.IsChecked == true ? 0 : (RbNoHorizon.IsChecked == true ? 1 : (RbLocalSnowplow.IsChecked == true ? 2 : 3));
 
                 List<MesherAlgorithm.Point3D> boundaryNodes = new List<MesherAlgorithm.Point3D>();
                 foreach (var pt in capturedPoints)
@@ -203,11 +203,13 @@ namespace MeshGui
 
                 mySapModel.SetModelIsLocked(false);
 
+                int deletedInternals = DeleteMatchingAreas(boundaryNodes);
+
                 // Ejecutamos Ray-Slicing Boundary-Fitted Mesher
-                var generatedFaces = MesherAlgorithm.GenerateSlicerMesh(boundaryNodes, continuityNodes, dx, dy, tolPercent, isHorizontalPriority, isAntiClockwise, discontinuityHandling);
+                var meshResult = MesherAlgorithm.GenerateSlicerMesh(boundaryNodes, continuityNodes, dx, dy, tolPercent, isHorizontalPriority, isAntiClockwise, discontinuityHandling);
 
                 int successCt = 0;
-                foreach (var face in generatedFaces)
+                foreach (var face in meshResult.Faces)
                 {
                     int fn = face.Count;
                     if (fn >= 3 && fn <= 4)
@@ -225,6 +227,13 @@ namespace MeshGui
                         if (ret == 0 && !string.IsNullOrEmpty(newName))
                             successCt++;
                     }
+                }
+
+                // Para 2.2: Subdividir elementos adyacentes
+                if (discontinuityHandling == 2 && meshResult.OrphanEdges.Count > 0)
+                {
+                    int adjSubdivided = SubdivideAdjacentAreas(boundaryNodes, meshResult.OrphanEdges, areaProperty);
+                    successCt += adjSubdivided;
                 }
 
                 // Borramos area original si se generaron bien
@@ -338,6 +347,111 @@ namespace MeshGui
                 }
             }
             return deletedCount;
+        }
+
+        private int SubdivideAdjacentAreas(List<MesherAlgorithm.Point3D> boundaryNodes, List<MesherAlgorithm.OrphanEdgeInfo> orphanEdges, string areaProperty)
+        {
+            int subdividedCount = 0;
+
+            MesherAlgorithm.Point3D O = boundaryNodes[0];
+            MesherAlgorithm.Point3D vecU = (boundaryNodes[1] - boundaryNodes[0]).Normalize();
+            MesherAlgorithm.Point3D tempV = (boundaryNodes[2] - boundaryNodes[0]).Normalize();
+            MesherAlgorithm.Point3D normal = MesherAlgorithm.Point3D.Cross(vecU, tempV).Normalize();
+            MesherAlgorithm.Point3D vecV = MesherAlgorithm.Point3D.Cross(normal, vecU).Normalize();
+
+            foreach (var orphan in orphanEdges)
+            {
+                MesherAlgorithm.Point3D edgeStart3D = O + vecU * orphan.EdgeStart.U + vecV * orphan.EdgeStart.V;
+                MesherAlgorithm.Point3D edgeEnd3D = O + vecU * orphan.EdgeEnd.U + vecV * orphan.EdgeEnd.V;
+                MesherAlgorithm.Point3D missingNode3D = O + vecU * orphan.MissingNode.U + vecV * orphan.MissingNode.V;
+
+                int numAreas = 0;
+                string[] areaNames = null;
+                mySapModel.AreaObj.GetNameList(ref numAreas, ref areaNames);
+                if (numAreas == 0 || areaNames == null) continue;
+
+                string adjacentAreaName = null;
+                List<MesherAlgorithm.Point3D> adjacentNodes = null;
+
+                foreach (string aName in areaNames)
+                {
+                    if (activeCaptureMode == "AREA" && aName == activeSourceAreaName) continue;
+
+                    int nPts = 0;
+                    string[] ptNames = null;
+                    mySapModel.AreaObj.GetPoints(aName, ref nPts, ref ptNames);
+                    if (nPts < 3) continue;
+
+                    List<MesherAlgorithm.Point3D> areaNodes = new List<MesherAlgorithm.Point3D>();
+                    for (int i = 0; i < nPts; i++)
+                    {
+                        double x = 0, y = 0, z = 0;
+                        mySapModel.PointObj.GetCoordCartesian(ptNames[i], ref x, ref y, ref z);
+                        areaNodes.Add(new MesherAlgorithm.Point3D(x, y, z));
+                    }
+
+                    bool sharesEdge = false;
+                    for (int i = 0; i < areaNodes.Count; i++)
+                    {
+                        MesherAlgorithm.Point3D a1 = areaNodes[i];
+                        MesherAlgorithm.Point3D a2 = areaNodes[(i + 1) % areaNodes.Count];
+
+                        double dist1 = (a1 - edgeEnd3D).Length();
+                        double dist2 = (a2 - edgeEnd3D).Length();
+                        if (dist1 < 0.1 && dist2 < 0.1)
+                        {
+                            sharesEdge = true;
+                            break;
+                        }
+                    }
+
+                    if (sharesEdge)
+                    {
+                        adjacentAreaName = aName;
+                        adjacentNodes = areaNodes;
+                        break;
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(adjacentAreaName) && adjacentNodes != null)
+                {
+                    mySapModel.AreaObj.Delete(adjacentAreaName);
+                    subdividedCount++;
+
+                    MesherAlgorithm.Point3D n1 = adjacentNodes[0];
+                    MesherAlgorithm.Point3D n2 = adjacentNodes[1];
+                    MesherAlgorithm.Point3D n3 = adjacentNodes[2];
+                    MesherAlgorithm.Point3D n4 = adjacentNodes.Count > 3 ? adjacentNodes[3] : n3;
+
+                    double[] x = new double[] { n1.X, n2.X, n3.X };
+                    double[] y = new double[] { n1.Y, n2.Y, n3.Y };
+                    double[] z = new double[] { n1.Z, n2.Z, n3.Z };
+                    string newName1 = "";
+                    int ret1 = mySapModel.AreaObj.AddByCoord(3, ref x, ref y, ref z, ref newName1, areaProperty);
+                    if (ret1 == 0 && !string.IsNullOrEmpty(newName1)) subdividedCount++;
+
+                    if (adjacentNodes.Count > 3)
+                    {
+                        x = new double[] { n1.X, n3.X, n4.X };
+                        y = new double[] { n1.Y, n3.Y, n4.Y };
+                        z = new double[] { n1.Z, n3.Z, n4.Z };
+                        string newName2 = "";
+                        int ret2 = mySapModel.AreaObj.AddByCoord(3, ref x, ref y, ref z, ref newName2, areaProperty);
+                        if (ret2 == 0 && !string.IsNullOrEmpty(newName2)) subdividedCount++;
+                    }
+                    else
+                    {
+                        x = new double[] { n1.X, n3.X, edgeEnd3D.X };
+                        y = new double[] { n1.Y, n3.Y, edgeEnd3D.Y };
+                        z = new double[] { n1.Z, n3.Z, edgeEnd3D.Z };
+                        string newName2 = "";
+                        int ret2 = mySapModel.AreaObj.AddByCoord(3, ref x, ref y, ref z, ref newName2, areaProperty);
+                        if (ret2 == 0 && !string.IsNullOrEmpty(newName2)) subdividedCount++;
+                    }
+                }
+            }
+
+            return subdividedCount;
         }
     }
 }

@@ -93,7 +93,8 @@
         
         <GroupBox Header="3. Discontinuidad del Límite (Nudos Intermedios)" Grid.Row="5" Padding="10" Margin="0,10,0,0" Background="White" BorderBrush="#FFCCCCCC">
             <StackPanel Orientation="Vertical">
-                <RadioButton x:Name="RbNoHorizon" Content="2.1 Triangulación Local aísla en Límite" IsChecked="True" Margin="0,5,0,0"/>
+                <RadioButton x:Name="RbDefault" Content="Por Defecto (Sin Corrección)" IsChecked="True" Margin="0,5,0,0"/>
+                <RadioButton x:Name="RbNoHorizon" Content="2.1 Triangulación Local aísla en Límite" Margin="0,5,0,0"/>
                 <RadioButton x:Name="RbLocalSnowplow" Content="2.2 Subdividir 1er Elemento Adyacente" Margin="0,5,0,0"/>
                 <RadioButton x:Name="RbGlobalSnowplow" Content="2.3 Rompenieves Global (Atravesar)" Margin="0,5,0,0"/>
             </StackPanel>
