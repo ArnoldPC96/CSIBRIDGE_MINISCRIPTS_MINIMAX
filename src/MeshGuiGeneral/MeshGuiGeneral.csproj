@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <PlatformTarget>x64</PlatformTarget>
+    <AssemblyName>MeshGuiGeneral</AssemblyName>
+    <RootNamespace>MeshGuiGeneral</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="CSiAPIv1">
+      <HintPath>C:\Program Files\Computers and Structures\CSiBridge 26\CSiAPIv1.dll</HintPath>
+      <EmbedInteropTypes>False</EmbedInteropTypes>
+      <SpecificVersion>False</SpecificVersion>
+    </Reference>
+  </ItemGroup>
+</Project>
