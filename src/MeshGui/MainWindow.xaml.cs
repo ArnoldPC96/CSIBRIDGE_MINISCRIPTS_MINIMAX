@@ -187,6 +187,7 @@ namespace MeshGui
                 
                 bool isHorizontalPriority = RbHoriz.IsChecked == true;
                 bool isAntiClockwise = RbAntiHorario.IsChecked == true;
+                int discontinuityHandling = RbNoHorizon.IsChecked == true ? 1 : (RbLocalSnowplow.IsChecked == true ? 2 : 3);
 
                 List<MesherAlgorithm.Point3D> boundaryNodes = new List<MesherAlgorithm.Point3D>();
                 foreach (var pt in capturedPoints)
@@ -203,7 +204,7 @@ namespace MeshGui
                 mySapModel.SetModelIsLocked(false);
 
                 // Ejecutamos Ray-Slicing Boundary-Fitted Mesher
-                var generatedFaces = MesherAlgorithm.GenerateSlicerMesh(boundaryNodes, continuityNodes, dx, dy, tolPercent, isHorizontalPriority, isAntiClockwise);
+                var generatedFaces = MesherAlgorithm.GenerateSlicerMesh(boundaryNodes, continuityNodes, dx, dy, tolPercent, isHorizontalPriority, isAntiClockwise, discontinuityHandling);
 
                 int successCt = 0;
                 foreach (var face in generatedFaces)

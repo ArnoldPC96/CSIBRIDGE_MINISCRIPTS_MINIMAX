@@ -90,7 +90,7 @@ namespace MeshGui
         }
 
 
-        public static List<List<Point3D>> GenerateSlicerMesh(List<Point3D> boundary, List<Point3D> continuityNodes, double dx, double dy, double snapTolPercent, bool isHorizontalPriority, bool isAntiClockwise)
+        public static List<List<Point3D>> GenerateSlicerMesh(List<Point3D> boundary, List<Point3D> continuityNodes, double dx, double dy, double snapTolPercent, bool isHorizontalPriority, bool isAntiClockwise, int discontinuityHandling = 0)
         {
             if (boundary.Count < 3) return new List<List<Point3D>>();
 
@@ -134,7 +134,12 @@ namespace MeshGui
             double sliceSpacing = isHorizontalPriority ? dy : dx;
             double crossSpacing = isHorizontalPriority ? dx : dy;
 
-            List<List<Point2D>> mappedFaces2D = DynamicZipper(poly2D, cont2D, crossSpacing, sliceSpacing, minSlice, maxSlice, isSliceU);
+            List<List<Point2D>> mappedFaces2D = DynamicZipper(poly2D, cont2D, crossSpacing, sliceSpacing, minSlice, maxSlice, isSliceU, discontinuityHandling);
+
+            if (discontinuityHandling == 1)
+            {
+                RestoreSkippedBoundaries(mappedFaces2D, poly2D);
+            }
 
             List<List<Point3D>> mesh3D = new List<List<Point3D>>();
             foreach (var face2D in mappedFaces2D)
@@ -156,7 +161,7 @@ namespace MeshGui
             return mesh3D;
         }
 
-        private static List<List<Point2D>> DynamicZipper(List<Point2D> poly, List<Point2D> cont, double crossSpacing, double sliceSpacing, double minS, double maxS, bool isSliceU)
+        private static List<List<Point2D>> DynamicZipper(List<Point2D> poly, List<Point2D> cont, double crossSpacing, double sliceSpacing, double minS, double maxS, bool isSliceU, int discontinuityHandling)
         {
             List<double> rawSlices = new List<double>();
             foreach (var p in poly) rawSlices.Add(isSliceU ? p.U : p.V);
@@ -166,16 +171,30 @@ namespace MeshGui
             List<double> hardSlices = new List<double>();
             foreach (var s in rawSlices) if (hardSlices.Count == 0 || Math.Abs(hardSlices.Last() - s) > 1e-4) hardSlices.Add(s);
 
+            List<double> finalSlices = new List<double>();
             double sTol = sliceSpacing * 0.15;
-            List<double> finalSlices = new List<double>(hardSlices);
-
             double sHeight = maxS - minS;
             int numSDivs = Math.Max(1, (int)Math.Round(sHeight / sliceSpacing));
-            
-            for (int i = 1; i < numSDivs; i++) {
-                double uS = minS + i * (sHeight / numSDivs);
-                if (!hardSlices.Exists(hs => Math.Abs(hs - uS) < sTol)) {
-                    finalSlices.Add(uS);
+
+            if (discontinuityHandling == 1)
+            {
+                finalSlices.Add(minS);
+                finalSlices.Add(maxS);
+                for (int i = 1; i < numSDivs; i++)
+                {
+                    finalSlices.Add(minS + i * (sHeight / numSDivs));
+                }
+            }
+            else
+            {
+                finalSlices.AddRange(hardSlices);
+                for (int i = 1; i < numSDivs; i++)
+                {
+                    double uS = minS + i * (sHeight / numSDivs);
+                    if (!hardSlices.Exists(hs => Math.Abs(hs - uS) < sTol))
+                    {
+                        finalSlices.Add(uS);
+                    }
                 }
             }
 
@@ -232,20 +251,32 @@ namespace MeshGui
                     double costTriA = double.MaxValue;
                     double costTriB = double.MaxValue;
 
+                    double tA_quad = (double)(a + 1) / (rowA.Count - 1);
+                    double tB_quad = (double)(b + 1) / (rowB.Count - 1);
+                    double tA_triA = (double)(a + 1) / (rowA.Count - 1);
+                    double tB_triA = (double)(b) / (rowB.Count - 1);
+                    double tA_triB = (double)(a) / (rowA.Count - 1);
+                    double tB_triB = (double)(b + 1) / (rowB.Count - 1);
+
+                    double wA = Math.Abs((isSliceU ? rowA.Last().V : rowA.Last().U) - (isSliceU ? rowA.First().V : rowA.First().U));
+                    double wB = Math.Abs((isSliceU ? rowB.Last().V : rowB.Last().U) - (isSliceU ? rowB.First().V : rowB.First().U));
+                    double topoWeight = Math.Max(wA, wB);
+                    if (topoWeight < 1e-4) topoWeight = crossSpacing * Math.Max(rowA.Count, rowB.Count);
+
                     if (canQuad) {
                         double cA = isSliceU ? rowA[a + 1].V : rowA[a + 1].U;
                         double cB = isSliceU ? rowB[b + 1].V : rowB[b + 1].U;
-                        costQuad = Math.Abs(cA - cB) - 0.001; // Ventaja para formar Quads
+                        costQuad = Math.Abs(cA - cB) + topoWeight * Math.Abs(tA_quad - tB_quad) - 0.001;
                     }
                     if (canTriA) {
                         double cA = isSliceU ? rowA[a + 1].V : rowA[a + 1].U;
                         double cB = isSliceU ? rowB[b].V : rowB[b].U;
-                        costTriA = Math.Abs(cA - cB);
+                        costTriA = Math.Abs(cA - cB) + topoWeight * Math.Abs(tA_triA - tB_triA);
                     }
                     if (canTriB) {
                         double cA = isSliceU ? rowA[a].V : rowA[a].U;
                         double cB = isSliceU ? rowB[b + 1].V : rowB[b + 1].U;
-                        costTriB = Math.Abs(cA - cB);
+                        costTriB = Math.Abs(cA - cB) + topoWeight * Math.Abs(tA_triB - tB_triB);
                     }
 
                     if (canQuad && costQuad <= costTriA && costQuad <= costTriB) {
@@ -280,6 +311,79 @@ namespace MeshGui
             }
 
             return validFaces;
+        }
+        public static void RestoreSkippedBoundaries(List<List<Point2D>> mappedFaces2D, List<Point2D> poly2D)
+        {
+            Dictionary<string, int> edgeCounts = new Dictionary<string, int>();
+            foreach (var face in mappedFaces2D) {
+                for (int i=0; i<face.Count; i++) {
+                    Point2D p1 = face[i];
+                    Point2D p2 = face[(i+1)%face.Count];
+                    string key1 = $"{Math.Round(p1.U, 4)}_{Math.Round(p1.V, 4)}|{Math.Round(p2.U, 4)}_{Math.Round(p2.V, 4)}";
+                    string key2 = $"{Math.Round(p2.U, 4)}_{Math.Round(p2.V, 4)}|{Math.Round(p1.U, 4)}_{Math.Round(p1.V, 4)}";
+                    if (edgeCounts.ContainsKey(key2)) edgeCounts[key2]++;
+                    else if (edgeCounts.ContainsKey(key1)) edgeCounts[key1]++;
+                    else edgeCounts[key1] = 1;
+                }
+            }
+
+            List<List<Point2D>> newFaces = new List<List<Point2D>>();
+
+            foreach (var face in mappedFaces2D) {
+                for (int i=0; i<face.Count; i++) {
+                    Point2D p1 = face[i];
+                    Point2D p2 = face[(i+1)%face.Count];
+                    string key1 = $"{Math.Round(p1.U, 4)}_{Math.Round(p1.V, 4)}|{Math.Round(p2.U, 4)}_{Math.Round(p2.V, 4)}";
+                    string key2 = $"{Math.Round(p2.U, 4)}_{Math.Round(p2.V, 4)}|{Math.Round(p1.U, 4)}_{Math.Round(p1.V, 4)}";
+                    
+                    if ((edgeCounts.ContainsKey(key1) && edgeCounts[key1] == 1) || (edgeCounts.ContainsKey(key2) && edgeCounts[key2] == 1)) {
+                        int e1 = GetPolyEdgeIndex(p1, poly2D);
+                        int e2 = GetPolyEdgeIndex(p2, poly2D);
+
+                        if (e1 != -1 && e2 != -1 && e1 != e2) {
+                            int diff = (e2 - e1 + poly2D.Count) % poly2D.Count;
+                            
+                            // Valid cut-off corner with 1 missing node
+                            if (diff == 1) {
+                                Point2D missing = poly2D[(e1 + 1) % poly2D.Count];
+                                newFaces.Add(new List<Point2D>() { p2, p1, missing });
+                            }
+                            // Valid cut-off corner with 2 missing nodes
+                            else if (diff == 2) {
+                                Point2D missing1 = poly2D[(e1 + 1) % poly2D.Count];
+                                Point2D missing2 = poly2D[(e1 + 2) % poly2D.Count];
+                                newFaces.Add(new List<Point2D>() { p2, p1, missing1, missing2 });
+                            }
+                            else if (diff > 2 && diff < poly2D.Count - 2) {
+                                // Si cortó una figura extraña de más de 2 nudos, se generaría un polígono > 4 lados
+                                // CSiBridge solo acepta tris o quads, así que se fracciona a la fuerza
+                                Point2D missing1 = poly2D[(e1 + 1) % poly2D.Count];
+                                newFaces.Add(new List<Point2D>() { p2, p1, missing1 });
+                            }
+                        }
+                    }
+                }
+            }
+            mappedFaces2D.AddRange(newFaces);
+        }
+
+        private static int GetPolyEdgeIndex(Point2D p, List<Point2D> poly)
+        {
+            for (int i = 0; i < poly.Count; i++) {
+                if (IsPointOnSegment(p, poly[i], poly[(i + 1) % poly.Count])) return i;
+            }
+            return -1;
+        }
+
+        private static bool IsPointOnSegment(Point2D p, Point2D a, Point2D b)
+        {
+            double cross = (p.U - a.U) * (b.V - a.V) - (p.V - a.V) * (b.U - a.U);
+            if (Math.Abs(cross) > 1e-3) return false;
+            double dot = (p.U - a.U) * (b.U - a.U) + (p.V - a.V) * (b.V - a.V);
+            if (dot < -1e-3) return false;
+            double lenSq = (b.U - a.U) * (b.U - a.U) + (b.V - a.V) * (b.V - a.V);
+            if (dot > lenSq + 1e-3) return false;
+            return true;
         }
     }
 }
